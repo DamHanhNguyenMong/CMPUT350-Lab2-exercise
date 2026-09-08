@@ -1,2 +1,9 @@
 Answer written questions 1 and 2 here.
 
+1. The coordinate system in SFML starts at (0,0) at the top left, so the x-azis is pointing right like usual but the y-axis is pointing down. 
+This is different from the regular coordinate system we use in Math, with y-axis pointing upward. This affects positive angle rotate clockwise instead of 
+counterclockwise.
+
+2. Seperating input handling and the game logic helps the code more orginaized and easy to maintain and test. processInput() collects input 
+while the GameState update the game with the collected information. Mixing them up makes it harder to debug between input handling logic 
+and the game logic.

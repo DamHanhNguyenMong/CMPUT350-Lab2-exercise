@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -145,6 +146,25 @@ struct Bullet : public sf::Drawable {
         //      - lifetime <= 0.0f, or
         //      - bullet is off screen (use shape.getPosition() and
         //        WINDOW_WIDTH and WINDOW_HEIGHT)
+
+        // First assert that the bullet is alive before updating
+        assert(isAlive);
+        const float previousLifetime = lifetime;
+        shape.move(velocity);
+        // Decrease the bullet's lifetime by 1.0f / 60.0
+        lifetime -= 1.0f / 60.0f;
+
+        // Check if the bullet is off screen or if its lifetime <= 0 and mark it dead
+        sf::Vector2f bulletPos = shape.getPosition();
+        if (lifetime <= 0.0f || bulletPos.x < 0 || bulletPos.x > static_cast<float>(WINDOW_WIDTH) ||
+            bulletPos.y < 0 || bulletPos.y > static_cast<float>(WINDOW_HEIGHT)) {
+            isAlive = false;
+        }
+        // Assert that the lifetime has decreased correctly and that the bullet is marked dead if it should be
+        assert(lifetime == previousLifetime - 1.0f / 60.0f);
+        assert(isAlive || lifetime <= 0.0f || bulletPos.x < 0 ||
+               bulletPos.x > static_cast<float>(WINDOW_WIDTH) || bulletPos.y < 0 ||
+               bulletPos.y > static_cast<float>(WINDOW_HEIGHT));
     }
 
     void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
@@ -247,6 +267,24 @@ public:
         //  - Bullet direction is the same as the spaceship's facing direction.
         //  - Bullet should be shot from the current spaceship position.
 
+        if (inputSummary.shootingDesired) { // Check if the user wants to shoot
+            if (mShootClock.getElapsedTime().asSeconds() >= SHOOT_COOLDOWN) { //Check if the cooldown has passed
+                // Calculate the bullet's direction based on the spaceship's rotation
+                if (facingVector.length() > 0.0f) { //Check if the facing vector is not zero to avoid division by zero
+                sf::Vector2f bulletDirection = facingVector.normalized(); 
+                
+                // Create a new bullet at the spaceship's position with the calculated direction
+                mBullets.emplace_back(mSpaceship.getPosition(), bulletDirection * BULLET_SPEED);
+                // Restart the shooting cooldown clock
+                mShootClock.restart();
+                }
+                else {
+                    // If the facing vector is zero, cannot shoot a bullet in a direction
+                    std::cerr << "Spaceship facing vector is zero. Cannot shoot bullet!" << std::endl;
+                }
+            }
+        };
+
         // --- Update Asteroids ---
         for (auto& asteroid : mAsteroids) {
             asteroid.update();
@@ -296,6 +334,7 @@ private:
                     asteroid.isAlive = false;
                     // TODO: Add Explosion Sound Effect
                     // Play explosion sound!
+                    mExplosionSound.play();
 
                     break;  // Bullet can only hit one asteroid
                 }
@@ -310,6 +349,14 @@ private:
             // TODO: Use Circle-Circle intersection test (circlesIntersect)
             // to determine if the spaceship's hitbox collides with an asteroid.
             // If so, kill the asteroid and play an explosion sound.
+
+            // Check if the spaceships hitbox circle intersects with the asteroid circle 
+            if (circlesIntersect(mSpaceship.getPosition(), mSpaceship.hitboxRadius(),
+                                 asteroid.shape.getPosition(), asteroid.shape.getRadius())) { 
+                asteroid.isAlive = false; // Set isAlive
+                // Play explosion sound!
+                mExplosionSound.play();
+            }
         }
     }
 
@@ -335,6 +382,22 @@ private:
         // =====
         // TODO: What should we do with dead bullet objects? Just keep them lying around taking up
         // space in memory?
+
+        // Remove dead bullets from the mBullets vector to free up memory 
+
+        std::vector<Bullet> aux; // Make a new vector for alive bullets
+        aux.reserve(mBullets.size()); // Reserve space for the new vector
+
+        for (const auto& bullet : mBullets) { // Iterate through the bullets
+            if (bullet.isAlive) { // If the bullet is alive, add it to the new vector
+                aux.push_back(bullet);
+            }
+        }
+        aux.swap(mBullets); // Swap the new vector with the old one, so the new one is reused and old ones removed
+        // Assert that all bullets in mBullets are alive after cleanup
+        assert(std::all_of(mBullets.begin(), mBullets.end(),
+                   [](const Bullet& bullet) { return bullet.isAlive; }));
+
     }
 
     void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
